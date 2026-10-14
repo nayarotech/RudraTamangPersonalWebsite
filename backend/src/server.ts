@@ -9,6 +9,7 @@ import "./db.js";
 import { ValidationError } from "./lib/content.js";
 import { adminRouter, authRouter } from "./routes/admin.js";
 import { publicRouter } from "./routes/public.js";
+import { surveyAdminRouter, surveyPublicRouter } from "./routes/surveys.js";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -33,8 +34,10 @@ app.use(
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api/public", publicRouter);
+app.use("/api/public", surveyPublicRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/admin", surveyAdminRouter);
 
 app.use("/api", (_req, res) => res.status(404).json({ error: "Not found" }));
 

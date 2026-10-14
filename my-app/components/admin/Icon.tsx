@@ -2,6 +2,7 @@ import {
   Activity,
   Award,
   Calendar,
+  ClipboardList,
   FileText,
   FolderOpen,
   Images,
@@ -39,6 +40,8 @@ const icons: Record<string, LucideIcon> = {
   media: FolderOpen,
   team: UserCog,
   activity: Activity,
+  survey: ClipboardList,
+  surveys: ClipboardList,
 };
 
 export function Icon({ name, className }: { name: string; className?: string }) {

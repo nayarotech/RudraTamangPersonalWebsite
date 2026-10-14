@@ -3,13 +3,13 @@ import { ArrowRight, ArrowUpRight, Check, Search } from "lucide-react";
 import { AchievementCard, EventRow, PostCard } from "@/components/site/Cards";
 import { DocumentRow } from "@/components/site/DocumentRow";
 import { Markdown } from "@/components/site/Markdown";
-import { Cover, Img } from "@/components/site/Media";
+import { Cover, Img, VideoTile } from "@/components/site/Media";
 import { SectionHead } from "@/components/site/Section";
 import { api } from "@/lib/api";
 import { num, pick, pickList, t } from "@/lib/i18n";
 import { getLang } from "@/lib/lang";
 import type { GalleryImage, Item, Lang, Stat } from "@/lib/types";
-import { splitEmphasis, youtubeId } from "@/lib/utils";
+import { splitEmphasis } from "@/lib/utils";
 
 interface Home {
   site: Item;
@@ -212,18 +212,9 @@ export default async function HomePage() {
         <section className="border-t border-line bg-paper py-24">
           <div className="wrap">
             <SectionHead kicker={d.gallery.videos} title={pick(data.videos[0], "title", lang)} href="/gallery#videos" hrefLabel={d.common.viewAll} />
-            {youtubeId(data.videos[0].url) && (
-              <div className="mt-12 aspect-video bg-ink">
-                <iframe
-                  src={`https://www.youtube-nocookie.com/embed/${youtubeId(data.videos[0].url)}`}
-                  title={pick(data.videos[0], "title", lang)}
-                  className="h-full w-full"
-                  allow="accelerometer; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  loading="lazy"
-                />
-              </div>
-            )}
+            <div className="mt-12">
+              <VideoTile url={data.videos[0].url} thumbnail={data.videos[0].thumbnail} title={pick(data.videos[0], "title", lang)} lang={lang} />
+            </div>
           </div>
         </section>
       )}

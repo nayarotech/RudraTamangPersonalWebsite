@@ -93,7 +93,14 @@ adminRouter.get("/overview", (_req, res) => {
   const recentMessages = db.prepare(`SELECT id, name, subject, status, created_at FROM messages ORDER BY id DESC LIMIT 5`).all();
   const activity = db.prepare(`SELECT * FROM activity ORDER BY id DESC LIMIT 12`).all();
   const media = db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS bytes FROM media`).get();
-  res.json({ counts, unread, grievanceStatus, recentGrievances, recentMessages, activity, media });
+  const surveys = db
+    .prepare(
+      `SELECT (SELECT COUNT(*) FROM surveys WHERE status = 'open') AS open,
+        (SELECT COUNT(*) FROM survey_responses) AS responses,
+        (SELECT COUNT(*) FROM survey_responses WHERE created_at >= datetime('now', '-7 days')) AS week`,
+    )
+    .get();
+  res.json({ counts, unread, grievanceStatus, recentGrievances, recentMessages, activity, media, surveys });
 });
 
 adminRouter.get("/activity", (req, res) => {

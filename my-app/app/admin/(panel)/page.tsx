@@ -18,6 +18,7 @@ interface Overview {
   recentMessages: { id: number; name: string; subject: string; status: string; created_at: string }[];
   activity: { id: number; user_name: string; action: string; collection: string | null; item_title: string | null; created_at: string }[];
   media: { n: number; bytes: number };
+  surveys: { open: number; responses: number; week: number };
 }
 
 export default function OverviewPage() {
@@ -58,13 +59,14 @@ export default function OverviewPage() {
       </div>
 
       {/* Needs attention */}
-      <div className="mt-6 grid gap-3 sm:grid-cols-3">
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           { key: "grievances", label: "Open grievances", value: o?.unread.grievances },
           { key: "messages", label: "Unread messages", value: o?.unread.messages },
           { key: "volunteers", label: "New volunteers", value: o?.unread.volunteers },
+          { key: "surveys", label: "Survey responses this week", value: o?.surveys.week, href: "/admin/surveys" },
         ].map((s) => (
-          <Link key={s.key} href={`/admin/c/${s.key}`} className="group relative overflow-hidden bg-navy p-6 text-white">
+          <Link key={s.key} href={s.href ?? `/admin/c/${s.key}`} className="group relative overflow-hidden bg-navy p-6 text-white">
             <div className="grid-lines absolute inset-0 opacity-60" aria-hidden />
             <div className="relative">
               <p className="text-sm text-white/60">{s.label}</p>

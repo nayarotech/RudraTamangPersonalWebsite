@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Cover } from "@/components/site/Media";
+import { Cover, VideoTile } from "@/components/site/Media";
 import { Empty, PageHero } from "@/components/site/Section";
 import { list } from "@/lib/api";
 import { formatDate, num, pick, t } from "@/lib/i18n";
 import { getLang } from "@/lib/lang";
 import type { GalleryImage } from "@/lib/types";
-import { youtubeId } from "@/lib/utils";
 
 export async function generateMetadata(): Promise<Metadata> {
   const lang = await getLang();
@@ -59,25 +58,9 @@ export default async function GalleryPage() {
             <h2 className="kicker">{d.gallery.videos}</h2>
             <div className="mt-8 grid gap-x-6 gap-y-12 md:grid-cols-2">
               {videos.items.map((v) => {
-                const id = youtubeId(v.url);
                 return (
                   <div key={v.id}>
-                    {id ? (
-                      <div className="aspect-video bg-ink">
-                        <iframe
-                          src={`https://www.youtube-nocookie.com/embed/${id}`}
-                          title={pick(v, "title", lang)}
-                          className="h-full w-full"
-                          allow="accelerometer; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                          loading="lazy"
-                        />
-                      </div>
-                    ) : (
-                      <a href={String(v.url)} target="_blank" rel="noopener noreferrer" className="flex aspect-video items-center justify-center bg-navy text-white">
-                        {d.common.view}
-                      </a>
-                    )}
+                    <VideoTile url={v.url} thumbnail={v.thumbnail} title={pick(v, "title", lang)} lang={lang} />
                     <p className="mt-4 text-[13px] text-muted">{formatDate(v.date, lang)}</p>
                     <h3 className="mt-1 text-lg font-semibold">{pick(v, "title", lang)}</h3>
                     {pick(v, "description", lang) && <p className="mt-2 text-muted">{pick(v, "description", lang)}</p>}

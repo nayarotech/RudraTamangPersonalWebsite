@@ -217,7 +217,13 @@ export const collections: Collection[] = [
     titleField: "title",
     fields: [
       { name: "title", label: "Title", type: "text", localized: true, required: true, column: true },
-      { name: "url", label: "YouTube link", type: "url", required: true, help: "Paste the normal YouTube URL." },
+      { name: "url", label: "Video link", type: "url", required: true, help: "YouTube, Facebook or TikTok link. YouTube videos play on the site; others open in a new tab." },
+      {
+        name: "thumbnail",
+        label: "Thumbnail image",
+        type: "image",
+        help: "Cover picture shown for Facebook and TikTok videos. Not needed for YouTube."
+      },
       { name: "date", label: "Date", type: "date", column: true },
       { name: "description", label: "Description", type: "textarea", localized: true },
     ],

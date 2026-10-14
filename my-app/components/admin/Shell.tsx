@@ -63,6 +63,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <div className="space-y-0.5">{inbox.map((c) => item(`/admin/c/${c.key}`, c.label, c.icon, badge(c.key)))}</div>
         </div>
         <div>
+          <p className="mb-2 px-3 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-white/35">Research</p>
+          <div className="space-y-0.5">{item("/admin/surveys", "Surveys", "survey")}</div>
+        </div>
+        <div>
           <p className="mb-2 px-3 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-white/35">Content</p>
           <div className="space-y-0.5">{content.map((c) => item(`/admin/c/${c.key}`, c.label, c.icon))}</div>
         </div>

@@ -59,6 +59,31 @@ export function migrate() {
       item_title TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS surveys (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      description TEXT,
+      questions TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'draft',
+      thank_you TEXT,
+      closes_at TEXT,
+      one_per_device INTEGER NOT NULL DEFAULT 0,
+      created_by INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS survey_responses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      survey_id INTEGER NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+      answers TEXT NOT NULL,
+      duration_sec INTEGER,
+      device_id TEXT,
+      ip_hash TEXT,
+      lang TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS survey_responses_survey ON survey_responses(survey_id, id);
   `);
 
   for (const c of collections) {

@@ -15,6 +15,16 @@ export function youtubeId(url: unknown): string | null {
   return m ? m[1] : null;
 }
 
+/** Display name of the site a video link points to. */
+export function videoPlatform(url: unknown): string {
+  if (typeof url !== "string") return "";
+  if (/youtu\.?be/.test(url)) return "YouTube";
+  if (/facebook\.com|fb\.watch/.test(url)) return "Facebook";
+  if (/tiktok\.com/.test(url)) return "TikTok";
+  if (/instagram\.com/.test(url)) return "Instagram";
+  return "";
+}
+
 export function fileExt(url: unknown) {
   return typeof url === "string" ? (url.split(".").pop() ?? "").toUpperCase() : "";
 }

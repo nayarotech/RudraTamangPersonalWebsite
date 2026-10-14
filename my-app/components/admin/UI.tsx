@@ -70,6 +70,8 @@ const tones: Record<string, string> = {
   Inactive: "bg-paper text-muted",
   Draft: "bg-paper text-muted",
   Published: "bg-[#e7f6ee] text-success",
+  Open: "bg-[#e7f6ee] text-success",
+  Scheduled: "bg-[#fff4e0] text-warn",
 };
 
 export function Badge({ children }: { children: React.ReactNode }) {
