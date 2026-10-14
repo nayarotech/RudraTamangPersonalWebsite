@@ -1,4 +1,4 @@
-import { db } from "../db.js";
+import { db, q } from "../db.js";
 import { columnsFor, type Collection, type Field } from "../schema.js";
 
 export type Row = Record<string, unknown>;
@@ -97,12 +97,11 @@ export function encode(fields: Field[], input: Row, partial = false): Row {
   return out;
 }
 
-function uniqueSlug(c: Collection, base: string, ignoreId?: number): string {
+async function uniqueSlug(c: Collection, base: string, ignoreId?: number): Promise<string> {
   const root = base || c.singular.toLowerCase();
   let slug = root;
   let n = 2;
-  const stmt = db.prepare(`SELECT id FROM "${c.key}" WHERE slug = ? AND id != ?`);
-  while (stmt.get(slug, ignoreId ?? -1)) slug = `${root}-${n++}`;
+  while (await db.get(`SELECT id FROM ${q(c.key)} WHERE slug = ? AND id != ?`, [slug, ignoreId ?? -1])) slug = `${root}-${n++}`;
   return slug;
 }
 
@@ -115,14 +114,14 @@ export interface ListOptions {
   filters?: Record<string, string>;
 }
 
-export function listItems(c: Collection, opts: ListOptions = {}) {
+export async function listItems(c: Collection, opts: ListOptions = {}) {
   const where: string[] = [];
   const params: unknown[] = [];
   if (opts.publishedOnly) where.push("published = 1");
   if (opts.q) {
     const searchable = c.fields.filter((f) => ["text", "textarea", "email"].includes(f.type)).flatMap(columnsFor);
     if (searchable.length) {
-      where.push(`(${searchable.map((col) => `"${col}" LIKE ?`).join(" OR ")})`);
+      where.push(`(${searchable.map((col) => `${q(col)} LIKE ?`).join(" OR ")})`);
       searchable.forEach(() => params.push(`%${opts.q}%`));
     }
   }
@@ -130,71 +129,72 @@ export function listItems(c: Collection, opts: ListOptions = {}) {
     const field = c.fields.find((f) => f.name === key);
     if (!field || field.private) continue;
     if (field.type === "boolean") {
-      where.push(`"${key}" = ?`);
+      where.push(`${q(key)} = ?`);
       params.push(value === "true" || value === "1" ? 1 : 0);
     } else {
-      where.push(`"${key}" = ?`);
+      where.push(`${q(key)} = ?`);
       params.push(value);
     }
   }
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  const total = (db.prepare(`SELECT COUNT(*) AS n FROM "${c.key}" ${whereSql}`).get(...params) as { n: number }).n;
+  const total = (await db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM ${q(c.key)} ${whereSql}`, params))!.n;
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 500);
   const offset = Math.max(opts.offset ?? 0, 0);
-  const rows = db
-    .prepare(`SELECT * FROM "${c.key}" ${whereSql} ORDER BY ${c.orderBy} LIMIT ? OFFSET ?`)
-    .all(...params, limit, offset) as Row[];
+  const rows = await db.all<Row>(`SELECT * FROM ${q(c.key)} ${whereSql} ORDER BY ${c.orderBy} LIMIT ? OFFSET ?`, [...params, limit, offset]);
   return { items: rows.map((r) => decode(c, r, opts)), total, limit, offset };
 }
 
-export function getItem(c: Collection, idOrSlug: string | number, opts: { publishedOnly?: boolean; includePrivate?: boolean } = {}) {
+export async function getItem(c: Collection, idOrSlug: string | number, opts: { publishedOnly?: boolean; includePrivate?: boolean } = {}) {
   const isId = /^\d+$/.test(String(idOrSlug));
-  const row = db
-    .prepare(`SELECT * FROM "${c.key}" WHERE ${isId ? "id" : "slug"} = ? ${opts.publishedOnly ? "AND published = 1" : ""}`)
-    .get(isId ? Number(idOrSlug) : String(idOrSlug)) as Row | undefined;
+  const row = await db.get<Row>(
+    `SELECT * FROM ${q(c.key)} WHERE ${isId ? "id" : "slug"} = ? ${opts.publishedOnly ? "AND published = 1" : ""}`,
+    [isId ? Number(idOrSlug) : String(idOrSlug)],
+  );
   return row ? decode(c, row, opts) : null;
 }
 
-export function createItem(c: Collection, input: Row) {
+export async function createItem(c: Collection, input: Row) {
   const data = encode(c.fields, input);
-  if (c.slugFrom) data.slug = uniqueSlug(c, slugify(String(input.slug || input[c.slugFrom] || "")));
+  if (c.slugFrom) data.slug = await uniqueSlug(c, slugify(String(input.slug || input[c.slugFrom] || "")));
   if (input.published !== undefined) data.published = input.published ? 1 : 0;
   if (input.sort_order !== undefined) data.sort_order = Number(input.sort_order) || 0;
   const cols = Object.keys(data);
-  const info = db
-    .prepare(`INSERT INTO "${c.key}" (${cols.map((k) => `"${k}"`).join(",")}) VALUES (${cols.map(() => "?").join(",")})`)
-    .run(...cols.map((k) => data[k]));
-  return getItem(c, Number(info.lastInsertRowid), { includePrivate: true })!;
+  const info = await db.run(
+    `INSERT INTO ${q(c.key)} (${cols.map(q).join(",")}) VALUES (${cols.map(() => "?").join(",")})`,
+    cols.map((k) => data[k]),
+  );
+  return (await getItem(c, info.insertId, { includePrivate: true }))!;
 }
 
-export function updateItem(c: Collection, id: number, input: Row) {
-  const existing = getItem(c, id, { includePrivate: true });
+export async function updateItem(c: Collection, id: number, input: Row) {
+  const existing = await getItem(c, id, { includePrivate: true });
   if (!existing) return null;
   const data = encode(c.fields, input, true);
   if (c.slugFrom && typeof input.slug === "string" && input.slug.trim()) {
-    data.slug = uniqueSlug(c, slugify(input.slug), id);
+    data.slug = await uniqueSlug(c, slugify(input.slug), id);
   } else if (c.slugFrom && !existing.slug && input[c.slugFrom]) {
-    data.slug = uniqueSlug(c, slugify(String(input[c.slugFrom])), id);
+    data.slug = await uniqueSlug(c, slugify(String(input[c.slugFrom])), id);
   }
   if (input.published !== undefined) data.published = input.published ? 1 : 0;
   if (input.sort_order !== undefined) data.sort_order = Number(input.sort_order) || 0;
   const cols = Object.keys(data);
   if (cols.length) {
-    db.prepare(`UPDATE "${c.key}" SET ${cols.map((k) => `"${k}" = ?`).join(", ")}, updated_at = datetime('now') WHERE id = ?`).run(
+    await db.run(`UPDATE ${q(c.key)} SET ${cols.map((k) => `${q(k)} = ?`).join(", ")}, updated_at = UTC_TIMESTAMP() WHERE id = ?`, [
       ...cols.map((k) => data[k]),
       id,
-    );
+    ]);
   }
   return getItem(c, id, { includePrivate: true });
 }
 
-export function deleteItem(c: Collection, id: number) {
-  return db.prepare(`DELETE FROM "${c.key}" WHERE id = ?`).run(id).changes > 0;
+export async function deleteItem(c: Collection, id: number) {
+  return (await db.run(`DELETE FROM ${q(c.key)} WHERE id = ?`, [id])).changes > 0;
 }
 
-export function reorder(c: Collection, ids: number[]) {
-  const stmt = db.prepare(`UPDATE "${c.key}" SET sort_order = ? WHERE id = ?`);
-  db.transaction(() => ids.forEach((id, i) => stmt.run(i, id)))();
+export async function reorder(c: Collection, ids: number[]) {
+  await db.transaction(async (conn) => {
+    for (const [i, id] of ids.entries()) await db.run(`UPDATE ${q(c.key)} SET sort_order = ? WHERE id = ?`, [i, id], conn);
+  });
 }
 
 export function titleOf(c: Collection, item: Row | null): string {
@@ -204,8 +204,8 @@ export function titleOf(c: Collection, item: Row | null): string {
 
 // ---- Settings ----------------------------------------------------------
 
-export function getSettings(fields: Field[], includePrivate = true): Row {
-  const row = db.prepare(`SELECT value FROM settings WHERE key = 'site'`).get() as { value: string } | undefined;
+export async function getSettings(fields: Field[], includePrivate = true): Promise<Row> {
+  const row = await db.get<{ value: string }>("SELECT value FROM settings WHERE `key` = 'site'");
   const raw = row ? (parseJson(row.value, {}) as Row) : {};
   const out: Row = {};
   for (const f of fields) {
@@ -218,30 +218,30 @@ export function getSettings(fields: Field[], includePrivate = true): Row {
   return out;
 }
 
-export function saveSettings(fields: Field[], input: Row): Row {
-  const current = getSettings(fields);
+export async function saveSettings(fields: Field[], input: Row): Promise<Row> {
+  const current = await getSettings(fields);
   const encoded = encode(fields, input, true);
   const next: Row = { ...current };
   for (const [k, v] of Object.entries(encoded)) {
     const field = fields.find((f) => columnsFor(f).includes(k))!;
     next[k] = JSON_TYPES.has(field.type) ? parseJson(v, []) : v;
   }
-  db.prepare(
-    `INSERT INTO settings (key, value, updated_at) VALUES ('site', ?, datetime('now'))
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-  ).run(JSON.stringify(next));
+  await db.run(
+    "INSERT INTO settings (`key`, value, updated_at) VALUES ('site', ?, UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = VALUES(updated_at)",
+    [JSON.stringify(next)],
+  );
   return next;
 }
 
 // ---- Activity log ------------------------------------------------------
 
-export function logActivity(user: { id: number; name: string } | undefined, action: string, collection?: string, itemId?: number, itemTitle?: string) {
-  db.prepare(`INSERT INTO activity (user_id, user_name, action, collection, item_id, item_title) VALUES (?, ?, ?, ?, ?, ?)`).run(
+export async function logActivity(user: { id: number; name: string } | undefined, action: string, collection?: string, itemId?: number, itemTitle?: string) {
+  await db.run(`INSERT INTO activity (user_id, user_name, action, collection, item_id, item_title) VALUES (?, ?, ?, ?, ?, ?)`, [
     user?.id ?? null,
     user?.name ?? "Visitor",
     action,
     collection ?? null,
     itemId ?? null,
     itemTitle ?? null,
-  );
+  ]);
 }

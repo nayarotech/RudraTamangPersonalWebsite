@@ -82,10 +82,8 @@ export function decodeSurvey(row: Row): Survey {
   return { ...(row as unknown as Survey), questions, one_per_device: Boolean(row.one_per_device) };
 }
 
-export function getSurvey(idOrSlug: number | string) {
-  const row = db
-    .prepare(`SELECT * FROM surveys WHERE ${typeof idOrSlug === "number" ? "id" : "slug"} = ?`)
-    .get(idOrSlug) as Row | undefined;
+export async function getSurvey(idOrSlug: number | string) {
+  const row = await db.get<Row>(`SELECT * FROM surveys WHERE ${typeof idOrSlug === "number" ? "id" : "slug"} = ?`, [idOrSlug]);
   return row ? decodeSurvey(row) : null;
 }
 
@@ -102,12 +100,11 @@ export function isAccepting(survey: Pick<Survey, "status" | "closes_at">) {
 
 const randomSlug = customAlphabet("abcdefghijkmnpqrstuvwxyz23456789", 8);
 
-export function uniqueSurveySlug(base: string, ignoreId = -1) {
+export async function uniqueSurveySlug(base: string, ignoreId = -1) {
   const root = slugify(base) || randomSlug();
   let slug = root;
   let n = 2;
-  const stmt = db.prepare(`SELECT id FROM surveys WHERE slug = ? AND id != ?`);
-  while (stmt.get(slug, ignoreId)) slug = `${root}-${n++}`;
+  while (await db.get(`SELECT id FROM surveys WHERE slug = ? AND id != ?`, [slug, ignoreId])) slug = `${root}-${n++}`;
   return slug;
 }
 

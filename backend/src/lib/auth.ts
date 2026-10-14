@@ -47,18 +47,20 @@ function readToken(req: Request): string | undefined {
   return req.cookies?.[SESSION_COOKIE];
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = readToken(req);
   if (!token) return res.status(401).json({ error: "Please sign in." });
+  let payload: jwt.JwtPayload;
   try {
-    const payload = jwt.verify(token, config.jwtSecret) as jwt.JwtPayload;
-    const user = db.prepare(`SELECT id, name, email, role FROM users WHERE id = ?`).get(Number(payload.sub)) as SessionUser | undefined;
-    if (!user) return res.status(401).json({ error: "Your account no longer exists." });
-    req.user = user;
-    next();
+    payload = jwt.verify(token, config.jwtSecret) as jwt.JwtPayload;
   } catch {
     return res.status(401).json({ error: "Your session has expired. Please sign in again." });
   }
+  // A database error here should surface as a 500, not as "please sign in".
+  const user = await db.get<SessionUser>(`SELECT id, name, email, role FROM users WHERE id = ?`, [Number(payload.sub)]);
+  if (!user) return res.status(401).json({ error: "Your account no longer exists." });
+  req.user = user;
+  next();
 }
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {

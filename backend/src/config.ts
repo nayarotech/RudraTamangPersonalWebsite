@@ -15,7 +15,13 @@ export const config = {
   isProd,
   port: Number(process.env.PORT ?? 4000),
   jwtSecret: isProd ? required("JWT_SECRET") : required("JWT_SECRET", "dev-only-secret-change-me"),
-  databaseFile: path.resolve(root, process.env.DATABASE_FILE ?? "data/site.db"),
+  db: {
+    host: process.env.DB_HOST ?? "localhost",
+    port: Number(process.env.DB_PORT ?? 3306),
+    name: isProd ? required("DB_NAME") : required("DB_NAME", "rudratamang"),
+    user: isProd ? required("DB_USER") : required("DB_USER", "root"),
+    password: process.env.DB_PASSWORD ?? "",
+  },
   uploadDir: path.resolve(root, process.env.UPLOAD_DIR ?? "uploads"),
   /** Comma-separated list of origins allowed to call the API from a browser. */
   corsOrigins: (process.env.CORS_ORIGINS ?? "http://localhost:3000").split(",").map((s) => s.trim()),

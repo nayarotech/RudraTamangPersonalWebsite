@@ -5,7 +5,7 @@ import cors from "cors";
 import helmet from "helmet";
 import multer from "multer";
 import { config } from "./config.js";
-import "./db.js";
+import { migrate } from "./db.js";
 import { ValidationError } from "./lib/content.js";
 import { adminRouter, authRouter } from "./routes/admin.js";
 import { publicRouter } from "./routes/public.js";
@@ -53,6 +53,16 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err);
   res.status(500).json({ error: "Something went wrong on the server." });
 });
+
+try {
+  await migrate();
+} catch (err) {
+  console.error(
+    `Could not connect to MySQL database "${config.db.name}" as "${config.db.user}"@${config.db.host}. ` +
+      "Check DB_HOST, DB_NAME, DB_USER and DB_PASSWORD in .env.",
+  );
+  throw err;
+}
 
 app.listen(config.port, () => {
   console.log(`API ready on http://localhost:${config.port}`);

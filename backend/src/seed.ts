@@ -10,7 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
-import { db } from "./db.js";
+import { db, migrate, pool, q } from "./db.js";
 import { collectionMap, collections, settingsFields } from "./schema.js";
 import { createItem, saveSettings, type Row } from "./lib/content.js";
 import { hashPassword } from "./lib/auth.js";
@@ -18,33 +18,38 @@ import { hashPassword } from "./lib/auth.js";
 const force = process.argv.includes("--force");
 const SOURCES = path.resolve(process.cwd(), "../..");
 
-const hasContent = (db.prepare(`SELECT COUNT(*) AS n FROM ideas`).get() as { n: number }).n > 0;
+await migrate();
+const hasContent = (await db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM ideas`))!.n > 0;
 if (hasContent && !force) {
   console.log("Database already has content. Run with --force to reset it.");
+  await pool.end();
   process.exit(0);
 }
 if (force) {
-  for (const c of collections) db.exec(`DELETE FROM "${c.key}"`);
-  db.exec(`DELETE FROM settings; DELETE FROM activity;`);
+  for (const c of collections) await db.run(`DELETE FROM ${q(c.key)}`);
+  await db.run(`DELETE FROM settings`);
+  await db.run(`DELETE FROM activity`);
 }
 
-const add = (key: string, rows: Row[]) => rows.forEach((r, i) => createItem(collectionMap.get(key)!, { sort_order: i, ...r }));
+const add = async (key: string, rows: Row[]) => {
+  for (const [i, r] of rows.entries()) await createItem(collectionMap.get(key)!, { sort_order: i, ...r });
+};
 
 // ---- Admin account ------------------------------------------------------
 
 const adminEmail = "admin@rudratamang.com";
-if (!db.prepare(`SELECT id FROM users WHERE email = ?`).get(adminEmail)) {
-  db.prepare(`INSERT INTO users (name, email, role, password_hash) VALUES (?, ?, 'admin', ?)`).run(
+if (!(await db.get(`SELECT id FROM users WHERE email = ?`, [adminEmail]))) {
+  await db.run(`INSERT INTO users (name, email, role, password_hash) VALUES (?, ?, 'admin', ?)`, [
     "Site Administrator",
     adminEmail,
     await hashPassword("ChangeMe@2026"),
-  );
+  ]);
   console.log(`Admin: ${adminEmail} / ChangeMe@2026  ← change this after first login`);
 }
 
 // ---- Settings -----------------------------------------------------------
 
-saveSettings(settingsFields, {
+await saveSettings(settingsFields, {
   name: "Rudra Tamang",
   name_np: "रुद्र तामाङ",
   position: "Candidate for Mayor, Urlabari Municipality",
@@ -123,7 +128,7 @@ saveSettings(settingsFields, {
 
 // ---- Vision ------------------------------------------------------------
 
-add("ideas", [
+await add("ideas", [
   {
     kicker: "Open government",
     kicker_np: "खुला सरकार",
@@ -188,7 +193,7 @@ add("ideas", [
 
 // ---- Achievements (placeholders) ---------------------------------------
 
-add("achievements", [
+await add("achievements", [
   {
     title: "Blacktopped the Urlabari–Rajghat link road",
     title_np: "उर्लाबारी–राजघाट जोडने सडक कालोपत्रे",
@@ -283,7 +288,7 @@ add("achievements", [
 
 // ---- Timeline -----------------------------------------------------------
 
-add("timeline", [
+await add("timeline", [
   { year: "1980s", title: "Childhood in Urlabari", title_np: "उर्लाबारीमा बाल्यकाल", description: "Placeholder milestone — edit in Dashboard → Life & Journey.", description_np: "नमुना — ड्यासबोर्डबाट सम्पादन गर्नुहोस्।" },
   { year: "2063", title: "Founded a farmers' cooperative", title_np: "किसान सहकारी स्थापना", description: "Placeholder milestone.", description_np: "नमुना।" },
   { year: "2070", title: "Chair, community forest user group", title_np: "सामुदायिक वन उपभोक्ता समूहको अध्यक्ष", description: "Placeholder milestone.", description_np: "नमुना।" },
@@ -300,7 +305,7 @@ if (fs.existsSync(dataFile)) {
   const np = "०१२३४५६७८९";
   const toNp = (s: string) => s.replace(/\d/g, (d) => np[Number(d)]);
   const chairs = new Map<number, string>(data.ward_party.map((w: { ward: number; winner_name: string }) => [w.ward, w.winner_name]));
-  add(
+  await add(
     "wards",
     data.wards.map((w: { ward: number; former: string; population: number; households: number; area_km2: number }) => ({
       number: w.ward,
@@ -316,20 +321,20 @@ if (fs.existsSync(dataFile)) {
 
 // ---- Documents (real municipal records) --------------------------------
 
-function importFile(src: string, title: string): string | null {
+async function importFile(src: string, title: string): Promise<string | null> {
   if (!fs.existsSync(src)) return null;
   const dir = path.join(config.uploadDir, "documents");
   fs.mkdirSync(dir, { recursive: true });
   const name = path.basename(src);
   fs.copyFileSync(src, path.join(dir, name));
   const url = `/uploads/documents/${name}`;
-  db.prepare(`INSERT INTO media (url, filename, original_name, mime, size, alt) VALUES (?, ?, ?, 'application/pdf', ?, ?)`).run(
+  await db.run(`INSERT INTO media (url, filename, original_name, mime, size, alt) VALUES (?, ?, ?, 'application/pdf', ?, ?)`, [
     url,
     name,
     name,
     fs.statSync(src).size,
     title,
-  );
+  ]);
   return url;
 }
 
@@ -386,16 +391,16 @@ const docs = [
   },
 ];
 
-add(
-  "documents",
-  docs
-    .map(({ src, ...d }) => ({ ...d, file: importFile(path.join(SOURCES, src), d.title) }))
-    .filter((d) => d.file),
-);
+const docRows: Row[] = [];
+for (const { src, ...d } of docs) {
+  const file = await importFile(path.join(SOURCES, src), d.title);
+  if (file) docRows.push({ ...d, file });
+}
+await add("documents", docRows);
 
 // ---- News, events, voices ----------------------------------------------
 
-add("posts", [
+await add("posts", [
   {
     title: "Ward dialogue series begins in Rajghat",
     title_np: "राजघाटबाट वडा संवाद शृङ्खला सुरु",
@@ -436,7 +441,7 @@ const inDays = (d: number, h = 11) => {
   return `${t.toISOString().slice(0, 10)}T${String(h).padStart(2, "0")}:00`;
 };
 
-add("events", [
+await add("events", [
   {
     title: "Ward 4 public dialogue",
     title_np: "वडा ४ सार्वजनिक संवाद",
@@ -467,7 +472,7 @@ add("events", [
   },
 ]);
 
-add("testimonials", [
+await add("testimonials", [
   {
     name: "Sample Name",
     role: "Farmer, Ward 8",
@@ -485,3 +490,4 @@ add("testimonials", [
 ]);
 
 console.log("Seeded starter content.");
+await pool.end();
